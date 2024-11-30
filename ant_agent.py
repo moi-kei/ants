@@ -1,51 +1,72 @@
 import asyncio
+import time
 import random
 
 class Ant:
-    def __init__(self, position, environment, sensing_range=1):
+    def __init__(self, position, environment, nest, color, sensing_range=1):
         self.position = position
         self.carrying_food = False
         self.environment = environment
+        self.nest = nest
+        self.color = color  # Color of the ant (matching its nest)
         self.sensing_range = sensing_range  # The range in which the ant can sense food
         self.target_food = None  # To store the target food the ant is moving towards
         self.following_pheromone = False  # To track if the ant is following a pheromone trail
         self.visited_positions = []  # Track the last position to prevent oscillation
         self.ignore_pheromone_until = None  # Time until which the ant will ignore pheromone trails
+        self.agent_goal = "exploring for food"
+        self.sleep_until = None  # New: Timestamp to track when the ant can act again
 
     async def decide_and_act(self):
+        # Check if the ant is currently sleeping
+        if self.sleep_until and time.time() < self.sleep_until:
+            # Ant is still sleeping; skip this action cycle
+            return
+
         if self.carrying_food:
             # Returning to the nest with food
-            if self.position == self.environment.nest.position:
+            if self.position == self.nest.position:
+                self.agent_goal = "depositing food"
+                print(f"Ant at {self.position} is depositing food.")
+                self.sleep_until = time.time() + 3  # Sleep for 3 seconds
                 self.carrying_food = False
-                self.environment.nest.add_food()
-                print(f"Ant at {self.position} dropped food. Total food at nest: {self.environment.nest.total_food}")
+                self.nest.add_food()
+                print(f"Ant at {self.position} dropped food. Total food at {self.color} nest: {self.nest.total_food}")
             else:
                 # Move towards the nest (lay pheromones if returning)
-                self.environment.drop_pheromone(self.position)
-                self.move_towards(self.environment.nest.position)
+                self.agent_goal = "returning to nest with food"
+                self.environment.drop_pheromone(self.position, self.color)
+                self.move_towards(self.nest.position)
         else:
             food_at_position = self.check_for_food_in_range()
             if food_at_position:
                 # Prioritize food even if ignoring pheromones
+                self.agent_goal = "picking up food"
+                print(f"Ant at {self.position} is picking up food.")
+                self.sleep_until = time.time() + 2  # Sleep for 2 seconds
                 self.carrying_food = True
                 self.target_food = None
                 self.environment.remove_food_at(food_at_position.position)
                 print(f"Ant at {self.position} picked up {food_at_position.food_type} food.")
             elif self.following_pheromone:
                 # Follow the pheromone trail
+                self.agent_goal = "following pheromone trail"
                 self.follow_pheromone_trail()
-            elif self.ignore_pheromone_until and asyncio.get_event_loop().time() < self.ignore_pheromone_until:
+            elif self.ignore_pheromone_until and time.time() < self.ignore_pheromone_until:
                 # Continue exploring if currently ignoring pheromone trails
+                self.agent_goal = "exploring for food"
                 self.random_move()
             else:
                 # Search for food or pheromones
                 if self.start_following_pheromone():
+                    self.agent_goal = "detected pheromone trail"
                     self.following_pheromone = True
                 else:
                     # Move randomly if no food or pheromone is found
+                    self.agent_goal = "exploring for food"
                     self.random_move()
 
-        await asyncio.sleep(0.1)  # Simulate time taken for action
+        await asyncio.sleep(0.1)  # Simulate time taken for action (non-blocking)
 
     def check_for_food_in_range(self):
         """Check if food exists within the sensing range."""
@@ -62,7 +83,7 @@ class Ant:
         neighbors = self.environment.get_neighbors(self.position)
         for neighbor in neighbors:
             x, y = neighbor
-            if self.environment.pheromone_grid[x][y] > 0:
+            if self.environment.pheromone_grids[self.color][x][y] > 0:
                 self.move_towards(neighbor)
                 return True
         return False
@@ -70,7 +91,7 @@ class Ant:
     def follow_pheromone_trail(self):
         """Follow the pheromone trail in the direction away from the nest."""
         neighbors = self.environment.get_neighbors(self.position)
-        nest_x, nest_y = self.environment.nest.position
+        nest_x, nest_y = self.nest.position
         target = None
 
         # Determine the direction away from the nest
@@ -79,7 +100,7 @@ class Ant:
             x, y = neighbor
             if neighbor == self.visited_positions[-1] if self.visited_positions else None:
                 continue  # Avoid oscillating back to the last visited position
-            if self.environment.pheromone_grid[x][y] > 0:
+            if self.environment.pheromone_grids[self.color][x][y] > 0:
                 # Calculate distance from the nest
                 distance_from_nest = (x - nest_x)**2 + (y - nest_y)**2
                 if distance_from_nest > max_distance:
@@ -96,6 +117,9 @@ class Ant:
             # Check for food at the new position
             food_at_position = self.check_for_food_in_range()
             if food_at_position:
+                self.agent_goal = "picking up food"
+                print(f"Ant at {self.position} is picking up food.")
+                self.sleep_until = time.time() + 2  # Simulate time to pick up food
                 self.carrying_food = True
                 self.target_food = None
                 self.environment.remove_food_at(food_at_position.position)
@@ -105,9 +129,7 @@ class Ant:
         else:
             # If no trail is found or the trail ends without food
             self.following_pheromone = False
-            self.ignore_pheromone_until = asyncio.get_event_loop().time() + 5  # Ignore pheromones for 5 seconds
-
-
+            self.ignore_pheromone_until = time.time() + 5  # Ignore pheromones for 5 seconds
 
     def move_towards(self, target):
         """Move towards the target position (either nest, food, or pheromone)."""
@@ -135,4 +157,3 @@ class Ant:
     
         # Move to the selected target
         self.move_towards(target)
-
