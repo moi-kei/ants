@@ -1,10 +1,13 @@
 import asyncio
-import time
 import random
+import math
+import time
 
 class Ant:
     def __init__(self, position, environment, nest, color, sensing_range=1):
         self.position = position
+        self.previous_position = position  # Track the previous position for direction
+        self.direction = 0  # Default direction angle (upwards)
         self.carrying_food = False
         self.environment = environment
         self.nest = nest
@@ -15,22 +18,29 @@ class Ant:
         self.visited_positions = []  # Track the last position to prevent oscillation
         self.ignore_pheromone_until = None  # Time until which the ant will ignore pheromone trails
         self.agent_goal = "exploring for food"
-        self.sleep_until = None  # New: Timestamp to track when the ant can act again
+        self.sleep_until = 0
+
+    def update_direction(self):
+        """Update the direction angle based on the current and previous position."""
+        dx = self.position[0] - self.previous_position[0]
+        dy = self.position[1] - self.previous_position[1]
+        if dx != 0 or dy != 0:
+            # Calculate angle using atan2 and convert to degrees
+            self.direction_angle = math.degrees(math.atan2(-dy, dx))  # Negative dy to align with screen coords
+        self.previous_position = self.position
 
     async def decide_and_act(self):
         # Check if the ant is currently sleeping
         if self.sleep_until and time.time() < self.sleep_until:
             # Ant is still sleeping; skip this action cycle
             return
-
         if self.carrying_food:
             # Returning to the nest with food
             if self.position == self.nest.position:
                 self.agent_goal = "depositing food"
-                print(f"Ant at {self.position} is depositing food.")
-                self.sleep_until = time.time() + 3  # Sleep for 3 seconds
                 self.carrying_food = False
                 self.nest.add_food()
+                self.sleep_until = time.time() + 3
                 print(f"Ant at {self.position} dropped food. Total food at {self.color} nest: {self.nest.total_food}")
             else:
                 # Move towards the nest (lay pheromones if returning)
@@ -42,17 +52,16 @@ class Ant:
             if food_at_position:
                 # Prioritize food even if ignoring pheromones
                 self.agent_goal = "picking up food"
-                print(f"Ant at {self.position} is picking up food.")
-                self.sleep_until = time.time() + 2  # Sleep for 2 seconds
                 self.carrying_food = True
                 self.target_food = None
                 self.environment.remove_food_at(food_at_position.position)
+                self.sleep_until = time.time() + 3
                 print(f"Ant at {self.position} picked up {food_at_position.food_type} food.")
             elif self.following_pheromone:
                 # Follow the pheromone trail
                 self.agent_goal = "following pheromone trail"
                 self.follow_pheromone_trail()
-            elif self.ignore_pheromone_until and time.time() < self.ignore_pheromone_until:
+            elif self.ignore_pheromone_until and asyncio.get_event_loop().time() < self.ignore_pheromone_until:
                 # Continue exploring if currently ignoring pheromone trails
                 self.agent_goal = "exploring for food"
                 self.random_move()
@@ -66,7 +75,8 @@ class Ant:
                     self.agent_goal = "exploring for food"
                     self.random_move()
 
-        await asyncio.sleep(0.1)  # Simulate time taken for action (non-blocking)
+        self.update_direction()  # Update direction after action
+        await asyncio.sleep(0.1)  # Simulate time taken for action
 
     def check_for_food_in_range(self):
         """Check if food exists within the sensing range."""
@@ -117,9 +127,6 @@ class Ant:
             # Check for food at the new position
             food_at_position = self.check_for_food_in_range()
             if food_at_position:
-                self.agent_goal = "picking up food"
-                print(f"Ant at {self.position} is picking up food.")
-                self.sleep_until = time.time() + 2  # Simulate time to pick up food
                 self.carrying_food = True
                 self.target_food = None
                 self.environment.remove_food_at(food_at_position.position)
@@ -129,12 +136,15 @@ class Ant:
         else:
             # If no trail is found or the trail ends without food
             self.following_pheromone = False
-            self.ignore_pheromone_until = time.time() + 5  # Ignore pheromones for 5 seconds
+            self.ignore_pheromone_until = asyncio.get_event_loop().time() + 5  # Ignore pheromones for 5 seconds
 
     def move_towards(self, target):
         """Move towards the target position (either nest, food, or pheromone)."""
         dx = target[0] - self.position[0]
         dy = target[1] - self.position[1]
+        if dx != 0 or dy != 0:
+            self.direction = math.degrees(math.atan2(-dy, dx))  # Negative dy to align with screen coordinates
+
         new_x = self.position[0] + (1 if dx > 0 else -1 if dx < 0 else 0)
         new_y = self.position[1] + (1 if dy > 0 else -1 if dy < 0 else 0)
         if 0 <= new_x < self.environment.rows and 0 <= new_y < self.environment.cols:
@@ -144,16 +154,22 @@ class Ant:
         """Move randomly in the grid, prioritizing unvisited locations."""
         neighbors = self.environment.get_neighbors(self.position)
         unvisited_neighbors = [n for n in neighbors if n not in self.visited_positions]
-    
+
         if unvisited_neighbors:
             target = random.choice(unvisited_neighbors)  # Choose a random unvisited location
         else:
             target = random.choice(neighbors)  # Fall back to any neighbor if all are visited
-    
+
+        # Calculate direction before moving
+        dx = target[0] - self.position[0]
+        dy = target[1] - self.position[1]
+        if dx != 0 or dy != 0:
+            self.direction = math.degrees(math.atan2(-dy, dx))  # Negative dy to align with screen coordinates
+
         # Add current position to visited locations
         self.visited_positions.append(self.position)
         if len(self.visited_positions) > 50:
             self.visited_positions.pop(0)  # Limit visited positions to the last 50
-    
+
         # Move to the selected target
-        self.move_towards(target)
+        self.position = target

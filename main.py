@@ -6,18 +6,47 @@ from food import generate_random_food
 from nest import Nest
 
 # Initialize constants
-WIDTH, HEIGHT = 800, 600
+WIDTH, HEIGHT = 1840, 1000
 GRID_SIZE = 20
 ROWS, COLS = HEIGHT // GRID_SIZE, WIDTH // GRID_SIZE
 
+# Colors for nests and ants
 colours = {
     "black": (0, 0, 0),
     "red": (255, 0, 0),
     "green": (0, 255, 0),
     "blue": (0, 0, 255),
 }
-# Reverse the `colours` dictionary
+# Reverse the colors dictionary
 REVERSE_COLOURS = {v: k for k, v in colours.items()}
+
+# Load images later to avoid pygame.display initialization error
+food_images = {}
+ant_images = {}
+nest_images = {}
+
+def load_images():
+    """Load all images after pygame is initialized."""
+    global food_images, ant_images, nest_images
+    food_images = {
+        "Leaf": pygame.image.load("images/leaf.png").convert_alpha(),
+        "Bug": pygame.image.load("images/bug.png").convert_alpha(),
+        "Berry": pygame.image.load("images/berry.png").convert_alpha(),
+        "Nut": pygame.image.load("images/nut.png").convert_alpha(),
+    }
+    ant_images = {
+        (0, 0, 0): pygame.image.load("images/black_ant.png").convert_alpha(),
+        (255, 0, 0): pygame.image.load("images/red_ant.png").convert_alpha(),
+        (0, 255, 0): pygame.image.load("images/green_ant.png").convert_alpha(),
+        (0, 0, 255): pygame.image.load("images/blue_ant.png").convert_alpha(),
+    }
+    # Load nest images
+    nest_images = {
+        (0, 0, 0): pygame.image.load("images/black_ant_nest.png").convert_alpha(),
+        (255, 0, 0): pygame.image.load("images/red_ant_nest.png").convert_alpha(),
+        (0, 255, 0): pygame.image.load("images/green_ant_nest.png").convert_alpha(),
+        (0, 0, 255): pygame.image.load("images/blue_ant_nest.png").convert_alpha(),
+    }
 
 
 def setup_simulation():
@@ -79,31 +108,78 @@ def render(SCREEN, environment, ants, nests, paused, hovered_nest=None, hovered_
     # Draw food
     for food in environment.food_items:
         food_x, food_y = food.position
-        food_color = (0, 128, 0)  # Dark green for food
-        pygame.draw.rect(
-            SCREEN,
-            food_color,
-            (food_y * GRID_SIZE, food_x * GRID_SIZE, GRID_SIZE, GRID_SIZE)
+        food_image = food_images[food.food_type]
+
+        # Set size for each food type
+        if food.food_type == "Nut":
+            size = (GRID_SIZE * 2, GRID_SIZE * 2)  # 2x2 size
+        elif food.food_type == "Berry":
+            size = (GRID_SIZE * 2, GRID_SIZE * 3)  # 4x4 size
+        elif food.food_type == "Leaf":
+            size = (GRID_SIZE * 4, GRID_SIZE * 4)  # 4x4 size
+        elif food.food_type == "Bug":
+            size = (GRID_SIZE * 6, GRID_SIZE * 3)  # 3x6 size
+        else:
+            size = (GRID_SIZE, GRID_SIZE)  # Default size (if needed)
+
+        # Resize the image
+        resized_image = pygame.transform.scale(food_image, size)
+
+        # Render the food
+        SCREEN.blit(
+            resized_image,
+            (
+                food_y * GRID_SIZE - size[0] // 2 + GRID_SIZE // 2,  # Adjust x to center
+                food_x * GRID_SIZE - size[1] // 2 + GRID_SIZE // 2,  # Adjust y to center
+            ),
         )
 
-    # Draw nests
     for nest in nests:
         nest_x, nest_y = nest.position
-        pygame.draw.rect(
-            SCREEN,
-            nest.color,
-            (nest_y * GRID_SIZE, nest_x * GRID_SIZE, GRID_SIZE, GRID_SIZE)
-        )
+    
+        # Normalize the color tuple
+        nest_color_key = tuple(map(int, nest.color))
+    
+        # Access the corresponding image
+        if nest_color_key not in nest_images:
+            raise ValueError(f"Nest image not found for color {nest_color_key}. Available keys: {list(nest_images.keys())}")
+        
+        nest_image = nest_images[nest_color_key]
+    
+        # Scale the image to 2x2 grid size
+        size = (GRID_SIZE * 2, GRID_SIZE * 2)
+        resized_nest_image = pygame.transform.scale(nest_image, size)
+    
+        # Calculate position to center the image over the 2x2 grid
+        center_x = nest_y * GRID_SIZE - size[0] // 2 + GRID_SIZE
+        center_y = nest_x * GRID_SIZE - size[1] // 2 + GRID_SIZE
+    
+        # Render the nest image
+        SCREEN.blit(resized_nest_image, (center_x, center_y))
 
-    # Draw ants
-    for idx, ant in enumerate(ants):
+
+
+
+    for ant in ants:
         ant_x, ant_y = ant.position
-        pygame.draw.circle(
-            SCREEN,
-            ant.color,
-            (ant_y * GRID_SIZE + GRID_SIZE // 2, ant_x * GRID_SIZE + GRID_SIZE // 2),
-            GRID_SIZE // 3
-        )
+        direction = ant.direction  # Get the direction in degrees
+        ant_image = ant_images[ant.color]
+
+        # Scale the ant image to 1x1 grid size
+        resized_ant_image = pygame.transform.scale(ant_image, (GRID_SIZE, GRID_SIZE))
+
+        # Rotate the image based on direction
+        rotated_image = pygame.transform.rotate(resized_ant_image, -(direction + 180))
+
+        # Get the dimensions of the rotated image
+        rotated_rect = rotated_image.get_rect()
+
+        # Calculate position to center the image in the grid cell
+        center_x = ant_y * GRID_SIZE + GRID_SIZE // 2 - rotated_rect.width // 2
+        center_y = ant_x * GRID_SIZE + GRID_SIZE // 2 - rotated_rect.height // 2
+
+        # Render the ant at the centered position
+        SCREEN.blit(rotated_image, (center_x, center_y))
 
     # If paused, display the paused message and hovered item info
     if paused:
@@ -111,43 +187,46 @@ def render(SCREEN, environment, ants, nests, paused, hovered_nest=None, hovered_
         pause_surface = font.render("Press SPACE to Start/Stop", True, (0, 0, 0))
         SCREEN.blit(pause_surface, (WIDTH // 2 - pause_surface.get_width() // 2, HEIGHT // 2 - pause_surface.get_height() // 2))
 
-        def draw_popup(text, mouse_x, mouse_y):
-            popup_font = pygame.font.Font(None, 30)
-            popup_surfaces = [popup_font.render(line, True, (0, 0, 0)) for line in text.split("\n")]
-            popup_width = max(surface.get_width() for surface in popup_surfaces) + 10
-            popup_height = sum(surface.get_height() for surface in popup_surfaces) + 10
-            popup_rect = pygame.Rect(mouse_x + 10, mouse_y + 10, popup_width, popup_height)
-
-            # Ensure the popup fits within the screen bounds
-            if popup_rect.right > WIDTH:
-                popup_rect.right = WIDTH - 10
-                popup_rect.topleft = (popup_rect.right - popup_width, popup_rect.top)
-            if popup_rect.bottom > HEIGHT:
-                popup_rect.bottom = HEIGHT - 10
-                popup_rect.topleft = (popup_rect.left, popup_rect.bottom - popup_height)
-
-            # Draw background and border
-            pygame.draw.rect(SCREEN, (255, 255, 255), popup_rect, border_radius=10)
-            pygame.draw.rect(SCREEN, (0, 0, 0), popup_rect, width=2, border_radius=10)
-
-            # Blit each line of the popup text
-            y_offset = popup_rect.top + 5
-            for surface in popup_surfaces:
-                SCREEN.blit(surface, (popup_rect.left + 5, y_offset))
-                y_offset += surface.get_height()
-
+        # Display nest info if hovering over a nest
         if hovered_nest:
-            draw_popup(f"Food Stored: {hovered_nest.total_food}", *pygame.mouse.get_pos())
+            render_popup(SCREEN, f"{REVERSE_COLOURS.get(hovered_nest.color, 'Unknown')} Ant Nest\nFood Collected: {hovered_nest.total_food}")
 
+        # Display food info if hovering over food
         if hovered_food:
-            draw_popup(f"Type: {hovered_food.food_type}\nHP: {hovered_food.hp}", *pygame.mouse.get_pos())
+            render_popup(SCREEN, f"Type: {hovered_food.food_type}, HP: {hovered_food.hp}")
 
+        # Display ant info if hovering over an ant
         if hovered_ant:
-            color_name = REVERSE_COLOURS.get(hovered_ant.color, "Unknown")
-            ant_index = hovered_ant.nest.ants.index(hovered_ant) + 1
-            draw_popup(f"{color_name} Ant {ant_index}\n{hovered_ant.agent_goal}", *pygame.mouse.get_pos())
+            render_popup(SCREEN, f"{REVERSE_COLOURS.get(hovered_ant.color, 'Unknown')} Ant\n{hovered_ant.agent_goal}")
 
+    # Update the display
     pygame.display.flip()
+
+
+def render_popup(screen, text):
+    """Render a popup with text at the mouse position."""
+    popup_font = pygame.font.Font(None, 30)
+    lines = text.split("\n")
+    surfaces = [popup_font.render(line, True, (0, 0, 0)) for line in lines]
+    width = max(surface.get_width() for surface in surfaces) + 10
+    height = sum(surface.get_height() for surface in surfaces) + 10
+
+    mouse_x, mouse_y = pygame.mouse.get_pos()
+    popup_rect = pygame.Rect(mouse_x + 10, mouse_y + 10, width, height)
+
+    if popup_rect.right > WIDTH:
+        popup_rect.right = WIDTH - 10
+    if popup_rect.bottom > HEIGHT:
+        popup_rect.bottom = HEIGHT - 10
+    popup_rect.topleft = (popup_rect.right - width, popup_rect.bottom - height)
+
+    pygame.draw.rect(screen, (255, 255, 255), popup_rect)
+    pygame.draw.rect(screen, (0, 0, 0), popup_rect, 2)
+
+    y_offset = popup_rect.top + 5
+    for surface in surfaces:
+        screen.blit(surface, (popup_rect.left + 5, y_offset))
+        y_offset += surface.get_height()
 
 
 async def run_simulation(environment, ants, nests):
@@ -201,12 +280,12 @@ async def run_simulation(environment, ants, nests):
 
     pygame.quit()
 
-
 if __name__ == "__main__":
     pygame.init()
     SCREEN = pygame.display.set_mode((WIDTH, HEIGHT))
-    pygame.display.set_caption("Virtual Ant Farm")
+    pygame.display.set_caption("ants")
 
+    load_images()
     environment, ants, nests = setup_simulation()
 
     try:

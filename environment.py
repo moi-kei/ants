@@ -50,21 +50,69 @@ class Environment:
                             grid[x][y] -= 1
             await asyncio.sleep(1)  # Decay pheromones every 0.5 seconds
 
-    async def spawn_random_food(self, spawn_interval=3):
+    async def spawn_random_food(self, spawn_interval=10):
         """Spawn a random food item at a random location at random intervals."""
         from food import FOOD_TYPES  # Import FOOD_TYPES directly from the food module
+
+        # Define sizes for each food type (width, height)
+        FOOD_SIZES = {
+            "Berry": (2, 3),  # 2x2
+            "Nut": (2, 2),    # 2x2
+            "Leaf": (4, 4),   # 4x4
+            "Bug": (8, 3),    # 3x6
+        }
+
         while True:
-            await asyncio.sleep(random.randint(1, spawn_interval))  # Wait for a random time between 5 and `spawn_interval` seconds
-            # Generate a random position
-            while True:
+            await asyncio.sleep(random.randint(5, spawn_interval))  # Wait for a random time
+
+            max_attempts = 100  # Prevent infinite loops
+            for _ in range(max_attempts):
                 x = random.randint(0, self.rows - 1)
                 y = random.randint(0, self.cols - 1)
-                if all((x, y) != nest.position for nest in self.nests):  # Ensure food doesn't spawn at any nest
-                    break
-            # Select a random food type and HP
-            food_type = random.choice(list(FOOD_TYPES.keys()))
+
+                # Select a random food type
+                food_type = random.choices(
+                    list(FOOD_TYPES.keys()),
+                    weights=[50, 50, 30, 20],  # Adjust the probabilities
+                    k=1
+                )[0]
+                food_width, food_height = FOOD_SIZES[food_type]
+
+                # Check for overlap with existing food items
+                overlaps = False
+                for food in self.food_items:
+                    fx, fy = food.position
+                    fwidth, fheight = FOOD_SIZES[food.food_type]
+                    if (x < fx + fwidth and x + food_width > fx and
+                            y < fy + fheight and y + food_height > fy):
+                        overlaps = True
+                        break
+
+                if overlaps:
+                    continue
+
+                # Check for overlap with nests
+                overlaps_with_nest = any(
+                    x < nx + 1 and x + food_width > nx and
+                    y < ny + 1 and y + food_height > ny
+                    for nest in self.nests for nx, ny in [nest.position]
+                )
+
+                if overlaps_with_nest:
+                    continue
+
+                # Valid position found, break loop
+                break
+            else:
+                # Skip spawning if no valid position is found
+                print("Failed to find a valid position for food.")
+                continue
+
+            # Select HP for the food
             hp_range = FOOD_TYPES[food_type]
             hp = random.randint(hp_range[0], hp_range[1])
+
             # Add the new food item to the environment
-            self.food_items.append(Food((x, y), food_type, hp))
+            new_food = Food((x, y), food_type, hp)
+            self.food_items.append(new_food)
             print(f"Spawned {food_type} at ({x}, {y}) with HP: {hp}")
