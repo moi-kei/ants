@@ -241,20 +241,21 @@ def render(screen, environment, ants, nests, paused, game_over, winner=None, hov
         if paused:
             # font and size
             font = pygame.font.Font(None, 50)
-            pause_surface = font.render("Press SPACE to Start/Stop", True, (0, 0, 0))
+            # render pause message
+            pause_surface = font.render("Press SPACE to start/stop", True, (0, 0, 0))
             screen.blit(pause_surface, (WIDTH // 2 - pause_surface.get_width() // 2, HEIGHT // 2 - pause_surface.get_height() // 2))
 
             # display nest info if hovering a nest
             if hovered_nest:
-                render_popup(screen, f"{REVERSE_COLOURS.get(hovered_nest.colour, 'Unknown')} Ant Nest\nFood Collected: {hovered_nest.total_food}")
+                render_popup(screen, f"{REVERSE_COLOURS.get(hovered_nest.colour, 'Unknown')} ant nest\nfood Collected: {hovered_nest.total_food}")
 
             # display food info if hovering food
             if hovered_food:
-                render_popup(screen, f"Type: {hovered_food.food_type}\nHP: {hovered_food.hp}")
+                render_popup(screen, f"{hovered_food.food_type}\nHP: {hovered_food.hp}")
 
             # display ant info if hovering ant
             if hovered_ant:
-                render_popup(screen, f"{REVERSE_COLOURS.get(hovered_ant.colour, 'Unknown')} Ant\n{hovered_ant.agent_goal}")
+                render_popup(screen, f"{REVERSE_COLOURS.get(hovered_ant.colour, 'Unknown')} ant\n{hovered_ant.agent_goal}")
 
     # update the display
     pygame.display.flip()
@@ -262,7 +263,7 @@ def render(screen, environment, ants, nests, paused, game_over, winner=None, hov
 def render_popup(screen, text):
     """
     function for rendering popups to display information about the simulation
-    popus are shown is the simulation is paused and the mouse is hovering over something
+    popus are shown when the simulation is paused and the mouse is hovering over something
 
     Args:
         screen (pygame.surface): the surface to render popus onto
