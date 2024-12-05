@@ -29,6 +29,6 @@ python main.py
 ## Controls
 
 - **Start/Stop Simulation:** Press `SPACE` to start or pause the simulation.
-- **Restart Simulation:** If the game is over, press `SPACE` to restart.
+- **Restart Simulation:** If the sim is finished, press `SPACE` to restart.
 - **Quit Simulation:** Press `ESC` to quit the simulation.
-- **information popups:** When pause mouse over ants, nests, or foor items to view information on the components of the system
+- **information popups:** When paused mouse-over ants, nests, or food items to view information on the components of the system
