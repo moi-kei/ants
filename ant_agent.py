@@ -4,7 +4,7 @@ import math
 import time
 
 class Ant:
-    def __init__(self, position, environment, nest, color, sensing_range=1):
+    def __init__(self, position, environment, nest, color, sensing_range=2):
         self.position = position
         self.previous_position = position  # Track the previous position for direction
         self.direction = 0  # Default direction angle (upwards)
@@ -51,12 +51,15 @@ class Ant:
             food_at_position = self.check_for_food_in_range()
             if food_at_position:
                 # Prioritize food even if ignoring pheromones
-                self.agent_goal = "picking up food"
-                self.carrying_food = True
-                self.target_food = None
-                self.environment.remove_food_at(food_at_position.position)
-                self.sleep_until = time.time() + 3
-                print(f"Ant at {self.position} picked up {food_at_position.food_type} food.")
+                if food_at_position.position[0] == self.position[0] and food_at_position.position[1] == self.position[1]:
+                    self.agent_goal = "picking up food"
+                    self.carrying_food = True
+                    self.target_food = None
+                    self.environment.remove_food_at(food_at_position.position)
+                    self.sleep_until = time.time() + 3
+                    print(f"Ant at {self.position} picked up {food_at_position.food_type} food.")
+                else:
+                    self.move_towards(food_at_position.position)
             elif self.following_pheromone:
                 # Follow the pheromone trail
                 self.agent_goal = "following pheromone trail"
@@ -127,11 +130,6 @@ class Ant:
             # Check for food at the new position
             food_at_position = self.check_for_food_in_range()
             if food_at_position:
-                self.carrying_food = True
-                self.target_food = None
-                self.environment.remove_food_at(food_at_position.position)
-                print(f"Ant at {self.position} picked up {food_at_position.food_type} food.")
-                # Continue to the nest, no need to ignore pheromone trails
                 self.following_pheromone = False
         else:
             # If no trail is found or the trail ends without food
